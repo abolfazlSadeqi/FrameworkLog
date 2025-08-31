@@ -1,4 +1,4 @@
-﻿namespace FrameworkLog.Classes;
+﻿namespace FrameworkLog.Models.Others;
 
 public class PerformanceConfig
 {

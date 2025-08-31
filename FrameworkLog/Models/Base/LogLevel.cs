@@ -4,7 +4,7 @@ using Serilog.Sinks.Elasticsearch;
 using System.Collections.Generic;
 
 
-namespace FrameworkLog.Classes;
+namespace FrameworkLog.Models.Base;
 
 // سطح‌بندی لاگ
 public enum LogLevelType

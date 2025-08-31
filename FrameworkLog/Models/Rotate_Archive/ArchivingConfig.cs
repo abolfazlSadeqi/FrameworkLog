@@ -1,4 +1,4 @@
-﻿namespace FrameworkLog.Classes;
+﻿namespace FrameworkLog.Models.Rotate_Archive;
 
 public class ArchivingConfig
 {

@@ -1,4 +1,6 @@
-﻿namespace FrameworkLog.Classes;
+﻿using FrameworkLog.Models.Others;
+
+namespace FrameworkLog.Models.Sink;
 
 public class FileLoggingConfig
 {
@@ -11,6 +13,8 @@ public class FileLoggingConfig
     public int? MaxRetainedFiles { get; set; }
     public bool EnableCompression { get; set; }
     public string ArchivePath { get; set; }
+    public OutputTemplateConfig OutputTemplate { get; set; }
+
 }
 
 

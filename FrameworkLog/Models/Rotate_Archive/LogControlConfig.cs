@@ -1,4 +1,6 @@
-﻿namespace FrameworkLog.Classes;
+﻿using FrameworkLog.Models.Base;
+
+namespace FrameworkLog.Models.Rotate_Archive;
 
 public class LogControlConfig
 {

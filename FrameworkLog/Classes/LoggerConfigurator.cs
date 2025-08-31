@@ -1,8 +1,12 @@
-﻿using Serilog;
-using Serilog.Core;
+﻿using FrameworkLog.Models.Base;
+using FrameworkLog.Models.Others;
+using Microsoft.AspNetCore.Http;
+using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.Elasticsearch;
+using Serilog.Sinks.MSSqlServer;
 using System;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -18,6 +22,15 @@ public static class LoggerConfigurator
             .Enrich.WithProperty("AppName", config.ApplicationName)
             .Enrich.WithProperty("AppVersion", config.ApplicationVersion)
             .Enrich.WithProperty("Environment", config.Environment);
+
+        loggerConfig.Enrich.FromLogContext();
+
+        if (config.OverrideSettings.Enabled)
+        {
+            loggerConfig.MinimumLevel.Override("Microsoft", config.OverrideSettings.MicrosoftLevel);
+            loggerConfig.MinimumLevel.Override("System", config.OverrideSettings.SystemLevel);
+        }
+
 
         // 📌 TimeZone
         if (!string.IsNullOrEmpty(config.TimeZone))
@@ -48,31 +61,47 @@ public static class LoggerConfigurator
                         case "ThreadId":
                             loggerConfig.Enrich.WithThreadId();
                             break;
-                        case "CorrelationId":
-                            loggerConfig.Enrich.WithCorrelationId();
-                            break;
                     }
                 }
+            }
+            if (settings.Enrichers?.Enabled == true && settings.Enrichers.EnableCorrelationId)
+            {
+                var httpContextAccessor = new HttpContextAccessor();
+                loggerConfig.Enrich.WithCorrelationId();
+                loggerConfig.Enrich.WithCorrelationIdHeader();
+
             }
 
             // 📌 File Logging
             if (settings.FileLogging?.Enabled == true)
             {
                 var logFilePath = Path.Combine(settings.FileLogging.Directory,
-                    settings.FileLogging.FileNamePattern.Replace("{level}", level.ToString()));
+                    settings.FileLogging.FileNamePattern
+                    .Replace("{level}", level.ToString())
+                    .Replace("{date}", DateTime.Now.ToString("yyyyMMdd"))
+                    .Replace("{time}", DateTime.Now.ToString("HHmmss"))
+                    .Replace("{app}", config.ApplicationName)
+                    .Replace("{Environment}", config.Environment)
 
-                loggerConfig.WriteTo.File(
-                    path: logFilePath,
-                    rollingInterval: Enum.TryParse<RollingInterval>(
-                        settings.FileLogging.RollingInterval, true, out var interval)
-                        ? interval : RollingInterval.Day,
-                    rollOnFileSizeLimit: settings.FileLogging.RollOnFileSizeLimit,
-                    fileSizeLimitBytes: settings.FileLogging.FileSizeLimitBytes,
-                    retainedFileCountLimit: settings.FileLogging.MaxRetainedFiles,
-                    restrictedToMinimumLevel: serilogLevel
-                   );
+                    );
 
-                // آرشیو و فشرده‌سازی پس از رول (manually)
+
+                loggerConfig.WriteTo.Logger(lc => lc
+                   .Filter.ByIncludingOnly(le => le.Level == serilogLevel)
+                   .WriteTo.File(
+                       path: logFilePath,
+                       rollingInterval: Enum.TryParse<RollingInterval>(
+                           settings.FileLogging.RollingInterval, true, out var interval)
+                           ? interval : RollingInterval.Day,
+                       rollOnFileSizeLimit: settings.FileLogging.RollOnFileSizeLimit,
+                       fileSizeLimitBytes: settings.FileLogging.FileSizeLimitBytes,
+                       retainedFileCountLimit: settings.FileLogging.MaxRetainedFiles,
+                       outputTemplate: BuildOutputTemplate(config,settings, settings.FileLogging.OutputTemplate)
+                   )
+               );
+
+
+                
                 if (settings.FileLogging.EnableCompression && settings.Archiving?.Enabled == true)
                 {
                     Task.Run(() => LogFileArchiver.ArchiveOldFiles(
@@ -94,16 +123,29 @@ public static class LoggerConfigurator
             {
                 try
                 {
+
+                    var columnOptions = new Serilog.Sinks.MSSqlServer.ColumnOptions();
+                    if (!string.IsNullOrWhiteSpace(settings.SqlLogging.OutputTemplate?.CustomTemplate))
+                    {
+
+                        columnOptions.Store.Remove(StandardColumn.Properties);
+                        columnOptions.AdditionalColumns = settings.SqlLogging.OutputTemplate.DefaultFields
+                            .Select(f => new SqlColumn { ColumnName = f, DataType = SqlDbType.NVarChar })
+                            .ToList();
+                    }
+
                     loggerConfig.WriteTo.MSSqlServer(
                         connectionString: settings.SqlLogging.ConnectionString,
                         sinkOptions: new Serilog.Sinks.MSSqlServer.MSSqlServerSinkOptions
                         {
                             TableName = settings.SqlLogging.TableName,
-                            AutoCreateSqlTable = true,
-                            BatchPostingLimit = settings.SqlLogging.BatchSize
+                            AutoCreateSqlTable = true
                         },
+                        columnOptions: columnOptions,
                         restrictedToMinimumLevel: serilogLevel
                     );
+
+
                 }
                 catch
                 {
@@ -124,7 +166,8 @@ public static class LoggerConfigurator
                     IndexFormat = settings.ElkLogging.IndexPattern.Replace("{level}", level.ToString().ToLower()),
                     AutoRegisterTemplate = settings.ElkLogging.AutoRegisterTemplate,
                     BatchPostingLimit = settings.ElkLogging.BatchSize,
-                    MinimumLogEventLevel = serilogLevel
+                    MinimumLogEventLevel = serilogLevel,
+                    CustomFormatter = new CustomElkFormatter(settings.ElkLogging.OutputTemplate)
                 });
             }
 
@@ -133,16 +176,9 @@ public static class LoggerConfigurator
             {
 
                 var enricher = new HttpRequestEnricher(settings.RequestLogging);
-                loggerConfig.Enrich.With(enricher);  // <-- همین حالت درست است
+                loggerConfig.Enrich.With(enricher);
 
-                if (settings.RequestLogging.MaskSensitiveData)
-                {
-                    loggerConfig.Enrich.With(new MaskingEnricher(new MaskingConfig
-                    {
-                        Enabled = true,
-                        SensitiveKeys = new() { "Authorization", "Password" }
-                    }));
-                }
+             
             }
 
             // 📌 Exception Logging
@@ -151,10 +187,6 @@ public static class LoggerConfigurator
                 loggerConfig.Enrich.WithProperty("IncludeStackTrace", settings.ExceptionLogging.IncludeStackTrace);
                 loggerConfig.Enrich.WithProperty("IncludeInnerExceptions", settings.ExceptionLogging.IncludeInnerExceptions);
             }
-
-            // 📌 Masking
-            if (settings.Masking?.Enabled == true)
-                loggerConfig.Enrich.With(new MaskingEnricher(settings.Masking));
 
             // 📌 Detailed Logging
             if (settings.DetailedLogging?.Enabled == true)
@@ -270,44 +302,40 @@ public static class LoggerConfigurator
             File.Delete(oldFile);
         }
     }
-}
 
-// 📌 Enricher برای ماسک کردن داده‌های حساس
-public class MaskingEnricher : ILogEventEnricher
-{
-    private readonly MaskingConfig _config;
-    public MaskingEnricher(MaskingConfig config) => _config = config;
-
-    public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
+    private static string BuildOutputTemplate(LoggingConfig config, LogLevelSettings settings, OutputTemplateConfig? cfg)
     {
-        if (_config?.SensitiveKeys == null || !_config.SensitiveKeys.Any()) return;
+        string CustomTemplate = "";
+        if (config.EnableGlobalMetadata && config.GlobalTags != null && config.GlobalTags.Any())
+            CustomTemplate = "[Tags:{GlobalTags}]";
 
-        foreach (var key in _config.SensitiveKeys)
+        if (settings.Enrichers?.Enabled == true && settings.Enrichers.EnableCorrelationId)
+            CustomTemplate = CustomTemplate+ " [CorrelationId:{CorrelationId}] ";
+
+        if (cfg == null)
+            return CustomTemplate + "{Message:lj}{NewLine}";
+
+        if (!string.IsNullOrWhiteSpace(cfg.CustomTemplate))
+            return CustomTemplate + cfg.CustomTemplate;
+
+        if (cfg.UseDefaultTemplate && cfg.DefaultFields.Any())
         {
-            var prop = logEvent.Properties
-                .FirstOrDefault(p => p.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
-
-            if (!prop.Equals(default(KeyValuePair<string, LogEventPropertyValue>)))
+            var parts = cfg.DefaultFields.Select(f => f switch
             {
-                var masked = propertyFactory.CreateProperty(key, _config.MaskReplacement);
-                logEvent.AddOrUpdateProperty(masked);
-            }
+                "Timestamp" => "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}",
+                "Level" => "[{Level:u3}]",
+                "AppName" => "[{AppName}]",
+                "Environment" => "[{Environment}]",
+                "ThreadId" => "[Thread:{ThreadId}]",
+                "Exception" => "{Exception}",
+                _ => $"{{{f}}}"
+            });
+
+
+            return CustomTemplate + string.Join(" ", parts) + "{Message:lj}" +"{NewLine}";
         }
+
+        return CustomTemplate + "{Message:lj}{NewLine}";
     }
-}
 
-// 📌 Enricher برای Http Request (Headers + Body)
-public class HttpRequestEnricher : ILogEventEnricher
-{
-    private readonly RequestLoggingConfig _config;
-    public HttpRequestEnricher(RequestLoggingConfig config) => _config = config;
-
-    public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
-    {
-        if (_config.IncludeHeaders)
-            logEvent.AddOrUpdateProperty(propertyFactory.CreateProperty("RequestHeaders", "/* capture headers here */"));
-
-        if (_config.IncludeBody)
-            logEvent.AddOrUpdateProperty(propertyFactory.CreateProperty("RequestBody", "/* capture body here */"));
-    }
 }

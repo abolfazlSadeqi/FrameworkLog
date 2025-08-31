@@ -1,4 +1,6 @@
-﻿namespace FrameworkLog.Classes;
+﻿using FrameworkLog.Models.Others;
+
+namespace FrameworkLog.Models.Sink;
 
 public class SqlLoggingConfig
 {
@@ -7,6 +9,7 @@ public class SqlLoggingConfig
     public string TableName { get; set; } = "Logs";
     public int BatchSize { get; set; } = 50;
     public bool EnableFallbackToFile { get; set; }
+    public OutputTemplateConfig OutputTemplate { get; set; }
 }
 
 

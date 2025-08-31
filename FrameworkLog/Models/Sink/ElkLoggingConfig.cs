@@ -1,4 +1,6 @@
-﻿namespace FrameworkLog.Classes;
+﻿using FrameworkLog.Models.Others;
+
+namespace FrameworkLog.Models.Sink;
 
 public class ElkLoggingConfig
 {
@@ -7,6 +9,7 @@ public class ElkLoggingConfig
     public string IndexPattern { get; set; } = "logs-{level}-{yyyy.MM.dd}";
     public bool AutoRegisterTemplate { get; set; } = true;
     public int BatchSize { get; set; } = 100;
+    public OutputTemplateConfig OutputTemplate { get; set; }
 }
 
 

@@ -12,8 +12,11 @@ public class ValuesController : ControllerBase
     public IActionResult Test()
     {
 
-        Log.Information("test");
-        Log.Error("asasa");
+        Log.Information("test|username:fdfdfd|Password:123456dfdf");
+        Log.Error("test2");
+        Log.Error("test2");
+
+        Log.Debug("test");
 
         return Ok();
     }

@@ -1,4 +1,4 @@
-﻿namespace FrameworkLog.Classes;
+﻿namespace FrameworkLog.Models.Rotate_Archive;
 
 public class LogRotateConfig
 {
@@ -7,6 +7,4 @@ public class LogRotateConfig
     public int MaxFileSizeMB { get; set; } = 100;
     public int MaxRetainedFiles { get; set; } = 10;
 }
-
-
 

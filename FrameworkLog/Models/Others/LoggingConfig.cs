@@ -1,4 +1,7 @@
-﻿namespace FrameworkLog.Classes;
+﻿using FrameworkLog.Models.Base;
+using Serilog.Events;
+
+namespace FrameworkLog.Models.Others;
 
 public class LoggingConfig
 {
@@ -8,10 +11,17 @@ public class LoggingConfig
     public string TimeZone { get; set; } = "UTC";
     public bool EnableGlobalMetadata { get; set; } = true;
     public List<string> GlobalTags { get; set; } = new();
+    public LoggingOverrideConfig OverrideSettings { get; set; } = new();
 
-    // تنظیمات اختصاصی برای هر سطح
+
     public Dictionary<LogLevelType, LogLevelSettings> PerLevelSettings { get; set; } = new();
 }
 
 
+public class LoggingOverrideConfig
+{
+    public bool Enabled { get; set; } = false; // فعال/غیرفعال کردن Override
+    public LogEventLevel MicrosoftLevel { get; set; } = LogEventLevel.Warning;
+    public LogEventLevel SystemLevel { get; set; } = LogEventLevel.Warning;
+}
 
