@@ -14,10 +14,8 @@ public class LogLevelSettings
     public ElkLoggingConfig ElkLogging { get; set; }
     
     public EnricherConfig Enrichers { get; set; }
-    public RequestLoggingConfig RequestLogging { get; set; }
-    public ExceptionLoggingConfig ExceptionLogging { get; set; }
+
     
-    public DetailedLoggingConfig DetailedLogging { get; set; }
     public LogControlConfig Control { get; set; }
     public PerformanceConfig Performance { get; set; }
     public ArchivingConfig Archiving { get; set; }

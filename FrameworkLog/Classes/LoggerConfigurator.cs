@@ -15,6 +15,7 @@ namespace FrameworkLog.Classes;
 
 public static class LoggerConfigurator
 {
+
     public static ILogger ConfigureLogger(LoggingConfig config)
     {
         var loggerConfig = new LoggerConfiguration()
@@ -134,17 +135,19 @@ public static class LoggerConfigurator
                             .ToList();
                     }
 
-                    loggerConfig.WriteTo.MSSqlServer(
-                        connectionString: settings.SqlLogging.ConnectionString,
-                        sinkOptions: new Serilog.Sinks.MSSqlServer.MSSqlServerSinkOptions
-                        {
-                            TableName = settings.SqlLogging.TableName,
-                            AutoCreateSqlTable = true
-                        },
-                        columnOptions: columnOptions,
-                        restrictedToMinimumLevel: serilogLevel
+                   
+                    loggerConfig.WriteTo.Logger(lc => lc
+                        .Filter.ByIncludingOnly(e => e.Level == serilogLevel)
+                        .WriteTo.MSSqlServer(
+                            connectionString: settings.SqlLogging.ConnectionString,
+                            sinkOptions: new MSSqlServerSinkOptions
+                            {
+                                TableName = $"{settings.SqlLogging.TableName}", 
+                                AutoCreateSqlTable = true
+                            },
+                            columnOptions: columnOptions
+                        )
                     );
-
 
                 }
                 catch
@@ -161,45 +164,23 @@ public static class LoggerConfigurator
             // 📌 ELK Logging
             if (settings.ElkLogging?.Enabled == true)
             {
-                loggerConfig.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(settings.ElkLogging.Url))
-                {
-                    IndexFormat = settings.ElkLogging.IndexPattern.Replace("{level}", level.ToString().ToLower()),
-                    AutoRegisterTemplate = settings.ElkLogging.AutoRegisterTemplate,
-                    BatchPostingLimit = settings.ElkLogging.BatchSize,
-                    MinimumLogEventLevel = serilogLevel,
-                    CustomFormatter = new CustomElkFormatter(settings.ElkLogging.OutputTemplate)
-                });
-            }
-
-            // 📌 Request Logging
-            if (settings.RequestLogging?.Enabled == true)
-            {
-
-                var enricher = new HttpRequestEnricher(settings.RequestLogging);
-                loggerConfig.Enrich.With(enricher);
-
-             
-            }
-
-            // 📌 Exception Logging
-            if (settings.ExceptionLogging?.Enabled == true)
-            {
-                loggerConfig.Enrich.WithProperty("IncludeStackTrace", settings.ExceptionLogging.IncludeStackTrace);
-                loggerConfig.Enrich.WithProperty("IncludeInnerExceptions", settings.ExceptionLogging.IncludeInnerExceptions);
-            }
-
-            // 📌 Detailed Logging
-            if (settings.DetailedLogging?.Enabled == true)
-            {
-                loggerConfig.Enrich.WithProperty("IncludeContext", settings.DetailedLogging.IncludeContext);
-
-                if (settings.DetailedLogging.EnableAudit)
-                    loggerConfig.Enrich.WithProperty("AuditEnabled", true);
+                loggerConfig.WriteTo.Logger(lc => lc
+                    .Filter.ByIncludingOnly(e => e.Level == serilogLevel) // 👈 فقط همون Level
+                    .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(settings.ElkLogging.Url))
+                    {
+                        IndexFormat = settings.ElkLogging.IndexPattern
+                            .Replace("{level}", serilogLevel.ToString().ToLower()), // 👈 ایندکس مخصوص هر سطح
+                        AutoRegisterTemplate = settings.ElkLogging.AutoRegisterTemplate,
+                        BatchPostingLimit = settings.ElkLogging.BatchSize,
+                        CustomFormatter = new CustomElkFormatter(settings.ElkLogging.OutputTemplate)
+                    })
+                );
             }
 
             // 📌 Log Control
             if (settings.Control != null)
             {
+                // فیلتر کردن Tag های غیرفعال
                 foreach (var disabledTag in settings.Control.DisabledTags)
                 {
                     loggerConfig.Filter.ByExcluding(logEvent =>
@@ -207,17 +188,19 @@ public static class LoggerConfigurator
                         logEvent.Properties["Tag"].ToString().Trim('"') == disabledTag);
                 }
 
+                // حداقل سطح برای هر Tag
                 foreach (var kvp in settings.Control.MinLevelPerTag)
                 {
                     var tag = kvp.Key;
                     var minLevel = ConvertLogLevel(kvp.Value);
 
-                    loggerConfig.Filter.ByIncludingOnly(logEvent =>
+                    loggerConfig.Filter.ByExcluding(logEvent =>
                         logEvent.Properties.ContainsKey("Tag") &&
                         logEvent.Properties["Tag"].ToString().Trim('"') == tag &&
-                        logEvent.Level >= minLevel);
+                        logEvent.Level < minLevel);
                 }
             }
+
 
             // 📌 Performance (Async Logging)
             if (settings.Performance?.AsyncLogging == true)
