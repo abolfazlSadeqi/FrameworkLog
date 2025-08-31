@@ -20,7 +20,7 @@ public class LoggingConfig
 
 public class LoggingOverrideConfig
 {
-    public bool Enabled { get; set; } = false; // فعال/غیرفعال کردن Override
+    public bool Enabled { get; set; } = false; 
     public LogEventLevel MicrosoftLevel { get; set; } = LogEventLevel.Warning;
     public LogEventLevel SystemLevel { get; set; } = LogEventLevel.Warning;
 }

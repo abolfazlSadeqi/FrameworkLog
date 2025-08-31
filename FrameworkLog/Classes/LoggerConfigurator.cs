@@ -180,7 +180,6 @@ public static class LoggerConfigurator
             // 📌 Log Control
             if (settings.Control != null)
             {
-                // فیلتر کردن Tag های غیرفعال
                 foreach (var disabledTag in settings.Control.DisabledTags)
                 {
                     loggerConfig.Filter.ByExcluding(logEvent =>
@@ -188,7 +187,6 @@ public static class LoggerConfigurator
                         logEvent.Properties["Tag"].ToString().Trim('"') == disabledTag);
                 }
 
-                // حداقل سطح برای هر Tag
                 foreach (var kvp in settings.Control.MinLevelPerTag)
                 {
                     var tag = kvp.Key;
