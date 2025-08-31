@@ -99,5 +99,78 @@ Log.Logger = LoggerConfigurator.ConfigureLogger(loggingConfig);
 builder.Host.UseSerilog(Log.Logger);
 ```
 
-With **one package and simple configs**, you get a complete, flexible, and production-ready logging system.
+Example 1 :
+
+```
+var loggingConfig = new LoggingConfig
+{
+    ApplicationName = "MyApp",
+    ApplicationVersion = "1.0.0",
+    Environment = "Development",
+    TimeZone = "UTC",
+    EnableGlobalMetadata = true,
+    GlobalTags = new List<string> { "api", "v1" },
+    OverrideSettings = new LoggingOverrideConfig
+    {
+        Enabled = true,
+        SystemLevel = Serilog.Events.LogEventLevel.Warning,
+        MicrosoftLevel = Serilog.Events.LogEventLevel.Warning
+    },
+    PerLevelSettings = new Dictionary<LogLevelType, LogLevelSettings>
+    {
+        [LogLevelType.Information] = new LogLevelSettings
+        {
+            Enabled = true,
+            FileLogging = new FileLoggingConfig
+            {
+                Enabled = true,
+                Directory = "logs",
+                FileNamePattern = "info_{app}_{Environment}_{time}_.log",
+                RollOnFileSizeLimit = true,
+                FileSizeLimitBytes = 5 * 1024 * 1024, // 5 MB
+                MaxRetainedFiles = 10,
+                RollingInterval = "Day",
+                EnableCompression = false,
+                ArchivePath = "logs/archive",
+                OutputTemplate = new OutputTemplateConfig
+                {
+                    UseDefaultTemplate = true,
+                    DefaultFields = new List<string> { "Timestamp", "Level", "Message" }
+                }
+            },
+            Enrichers = new EnricherConfig
+            {
+                Enabled = true,
+                EnableCorrelationId = true
+            },
+            Control = new LogControlConfig
+            {
+                DisabledTags = new List<string> { "VerboseAPI" },
+                MinLevelPerTag = new Dictionary<string, LogLevelType>
+                {
+                    { "Payment", LogLevelType.Warning },
+                    { "Auth", LogLevelType.Error }
+                }
+            }
+        }
+    }
+};
+
+```
+
+// Initialize logger
+builder.Services.AddHttpContextAccessor();
+Log.Logger = LoggerConfigurator.ConfigureLogger(loggingConfig);
+builder.Host.UseSerilog(Log.Logger);
+✅ Explanation
+File logging only: Logs are written to a specific directory (logs) with a custom filename pattern.
+
+Rolling & retention: Automatically rolls daily and keeps the last 10 files.
+
+Tags & control: You can disable logs for specific tags or enforce minimum levels per tag.
+
+Correlation ID: Included automatically for tracing requests.
+
+Global metadata: AppName, Version, Environment, TimeZone, and global tags are included in every log.
+
 
